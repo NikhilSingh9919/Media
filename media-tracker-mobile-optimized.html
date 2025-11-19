@@ -263,15 +263,30 @@
                         USER_DOC_ID
                     );
                     
-                    setAppwriteDocId(doc.$id);
-                    if (doc.watchlist) setWatchlist(JSON.parse(doc.watchlist));
-                    if (doc.watching) setWatching(JSON.parse(doc.watching));
-                    if (doc.watched) setWatched(JSON.parse(doc.watched));
+                    console.log('Loaded document from Appwrite:', doc);
+                    setAppwriteDocId(USER_DOC_ID); // Set to the custom ID we're using
+                    
+                    // Parse and load data from Appwrite
+                    const loadedWatchlist = doc.watchlist ? JSON.parse(doc.watchlist) : [];
+                    const loadedWatching = doc.watching ? JSON.parse(doc.watching) : [];
+                    const loadedWatched = doc.watched ? JSON.parse(doc.watched) : [];
+                    
+                    setWatchlist(loadedWatchlist);
+                    setWatching(loadedWatching);
+                    setWatched(loadedWatched);
+                    
+                    // Also update localStorage
+                    localStorage.setItem('watchlist', JSON.stringify(loadedWatchlist));
+                    localStorage.setItem('watching', JSON.stringify(loadedWatching));
+                    localStorage.setItem('watched', JSON.stringify(loadedWatched));
                     
                     setSaveStatus('Loaded from cloud ☁️');
                     setTimeout(() => setSaveStatus(''), 3000);
                 } catch (error) {
-                    console.log('No cloud data found, loading from localStorage');
+                    console.log('No cloud data found, loading from localStorage:', error);
+                    // Set the doc ID even if document doesn't exist yet
+                    setAppwriteDocId(USER_DOC_ID);
+                    
                     // Load from localStorage as fallback
                     const savedWatchlist = localStorage.getItem('watchlist');
                     const savedWatching = localStorage.getItem('watching');
@@ -296,23 +311,27 @@
                         updatedAt: new Date().toISOString()
                     };
 
-                    if (appwriteDocId) {
-                        // Update existing document
+                    console.log('Saving to Appwrite:', data);
+
+                    try {
+                        // Try to update existing document first
                         await databases.updateDocument(
                             APPWRITE_DATABASE_ID,
                             APPWRITE_COLLECTION_ID,
                             USER_DOC_ID,
                             data
                         );
-                    } else {
-                        // Create new document
-                        const doc = await databases.createDocument(
+                        console.log('Document updated successfully');
+                    } catch (updateError) {
+                        // If document doesn't exist, create it
+                        console.log('Document not found, creating new one');
+                        await databases.createDocument(
                             APPWRITE_DATABASE_ID,
                             APPWRITE_COLLECTION_ID,
                             USER_DOC_ID,
                             data
                         );
-                        setAppwriteDocId(doc.$id);
+                        console.log('Document created successfully');
                     }
                     
                     setSaveStatus('Saved to cloud ☁️');
@@ -325,23 +344,22 @@
             };
 
             // Save to localStorage and Appwrite whenever lists change
+            // Use a single effect with a debounce to prevent multiple rapid saves
             useEffect(() => {
-                if (!isAuthenticated) return;
+                if (!isAuthenticated || !appwriteDocId) return;
+                
+                // Save to localStorage immediately
                 localStorage.setItem('watchlist', JSON.stringify(watchlist));
-                saveDataToAppwrite(watchlist, watching, watched);
-            }, [watchlist, isAuthenticated]);
-
-            useEffect(() => {
-                if (!isAuthenticated) return;
                 localStorage.setItem('watching', JSON.stringify(watching));
-                saveDataToAppwrite(watchlist, watching, watched);
-            }, [watching, isAuthenticated]);
-
-            useEffect(() => {
-                if (!isAuthenticated) return;
                 localStorage.setItem('watched', JSON.stringify(watched));
-                saveDataToAppwrite(watchlist, watching, watched);
-            }, [watched, isAuthenticated]);
+                
+                // Debounce the Appwrite save to avoid too many API calls
+                const timeoutId = setTimeout(() => {
+                    saveDataToAppwrite(watchlist, watching, watched);
+                }, 500);
+                
+                return () => clearTimeout(timeoutId);
+            }, [watchlist, watching, watched, isAuthenticated, appwriteDocId]);
 
             const fetchTMDBContent = async (endpoint, params = {}) => {
                 const queryParams = new URLSearchParams({
