@@ -132,13 +132,30 @@
                 if (username === AUTH_USER && password === AUTH_PASS) {
                     setLoading(true);
                     try {
-                        // Create anonymous session for Appwrite
-                        await account.createAnonymousSession();
+                        // Try to login with email session
+                        try {
+                            await account.createEmailPasswordSession('yonik@mediatracker.com', 'YonikSecure@2121');
+                            console.log('Logged in with existing account');
+                        } catch (loginError) {
+                            console.log('No existing account, creating new one');
+                            // If login fails, create a new account
+                            try {
+                                await account.create('yonik_user_id', 'yonik@mediatracker.com', 'YonikSecure@2121', 'Yonik');
+                                // Now login with the new account
+                                await account.createEmailPasswordSession('yonik@mediatracker.com', 'YonikSecure@2121');
+                                console.log('Created and logged in with new account');
+                            } catch (createError) {
+                                console.error('Account creation error:', createError);
+                                // If account exists but wrong password, try to login again
+                                await account.createEmailPasswordSession('yonik@mediatracker.com', 'YonikSecure@2121');
+                            }
+                        }
                         onLogin();
                     } catch (err) {
                         console.error('Appwrite session error:', err);
-                        // Still allow login even if Appwrite fails
-                        onLogin();
+                        setError('Could not connect to cloud storage. Please check your internet connection.');
+                        setLoading(false);
+                        return;
                     }
                     setLoading(false);
                 } else {
@@ -256,6 +273,7 @@
 
             const loadDataFromAppwrite = async () => {
                 try {
+                    console.log('Attempting to load from Appwrite...');
                     // Try to get existing document
                     const doc = await databases.getDocument(
                         APPWRITE_DATABASE_ID,
@@ -271,6 +289,8 @@
                     const loadedWatching = doc.watching ? JSON.parse(doc.watching) : [];
                     const loadedWatched = doc.watched ? JSON.parse(doc.watched) : [];
                     
+                    console.log('Loaded data - Watchlist:', loadedWatchlist.length, 'Watching:', loadedWatching.length, 'Watched:', loadedWatched.length);
+                    
                     setWatchlist(loadedWatchlist);
                     setWatching(loadedWatching);
                     setWatched(loadedWatched);
@@ -283,7 +303,18 @@
                     setSaveStatus('Loaded from cloud ☁️');
                     setTimeout(() => setSaveStatus(''), 3000);
                 } catch (error) {
-                    console.log('No cloud data found, loading from localStorage:', error);
+                    console.error('Error loading from Appwrite:', error);
+                    console.log('Error details:', error.message, error.code);
+                    
+                    if (error.code === 404) {
+                        console.log('Document not found, will create on first save');
+                    } else if (error.code === 401) {
+                        console.error('Unauthorized - Please check Appwrite permissions');
+                        setSaveStatus('Permission error ❌');
+                    } else {
+                        console.error('Appwrite error:', error);
+                    }
+                    
                     // Set the doc ID even if document doesn't exist yet
                     setAppwriteDocId(USER_DOC_ID);
                     
@@ -311,7 +342,7 @@
                         updatedAt: new Date().toISOString()
                     };
 
-                    console.log('Saving to Appwrite:', data);
+                    console.log('Saving to Appwrite - Watchlist:', newWatchlist.length, 'Watching:', newWatching.length, 'Watched:', newWatched.length);
 
                     try {
                         // Try to update existing document first
@@ -321,25 +352,34 @@
                             USER_DOC_ID,
                             data
                         );
-                        console.log('Document updated successfully');
+                        console.log('Document updated successfully in Appwrite');
+                        setSaveStatus('Saved to cloud ☁️');
                     } catch (updateError) {
+                        console.log('Update failed, attempting to create document:', updateError.message);
                         // If document doesn't exist, create it
-                        console.log('Document not found, creating new one');
                         await databases.createDocument(
                             APPWRITE_DATABASE_ID,
                             APPWRITE_COLLECTION_ID,
                             USER_DOC_ID,
                             data
                         );
-                        console.log('Document created successfully');
+                        console.log('Document created successfully in Appwrite');
+                        setSaveStatus('Saved to cloud ☁️');
                     }
                     
-                    setSaveStatus('Saved to cloud ☁️');
                     setTimeout(() => setSaveStatus(''), 3000);
                 } catch (error) {
                     console.error('Error saving to Appwrite:', error);
-                    setSaveStatus('Save failed ❌');
-                    setTimeout(() => setSaveStatus(''), 3000);
+                    console.error('Error details:', error.message, error.code, error.response);
+                    
+                    if (error.code === 401) {
+                        setSaveStatus('Permission denied ❌ Check Appwrite settings');
+                    } else if (error.code === 404) {
+                        setSaveStatus('Collection not found ❌');
+                    } else {
+                        setSaveStatus('Save failed ❌ ' + error.message);
+                    }
+                    setTimeout(() => setSaveStatus(''), 5000);
                 }
             };
 
