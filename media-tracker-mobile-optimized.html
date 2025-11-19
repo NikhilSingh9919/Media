@@ -223,7 +223,7 @@
             const [isAuthenticated, setIsAuthenticated] = useState(false);
             const [activeTab, setActiveTab] = useState('discover');
             const [mediaType, setMediaType] = useState('all');
-            const [region, setRegion] = useState('all');
+            const [genre, setGenre] = useState('all');
             const [content, setContent] = useState([]);
             const [allContent, setAllContent] = useState([]);
             const [loading, setLoading] = useState(false);
@@ -235,12 +235,23 @@
             const [showSuggestions, setShowSuggestions] = useState(false);
             const [currentPage, setCurrentPage] = useState(1);
             const [totalPages, setTotalPages] = useState(1);
-            const [sortOrder, setSortOrder] = useState('default');
             const [saveStatus, setSaveStatus] = useState('');
             const [appwriteDocId, setAppwriteDocId] = useState(null);
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [showModal, setShowModal] = useState(false);
+            const [modalDetails, setModalDetails] = useState(null);
             const searchTimeout = useRef(null);
             const ITEMS_PER_PAGE = 20;
             const USER_DOC_ID = 'yonik_data'; // Fixed document ID for this user
+            
+            // Genre mappings for TMDB
+            const GENRE_MAP = {
+                '28': 'Action', '12': 'Adventure', '16': 'Animation', '35': 'Comedy',
+                '80': 'Crime', '99': 'Documentary', '18': 'Drama', '10751': 'Family',
+                '14': 'Fantasy', '36': 'History', '27': 'Horror', '10402': 'Music',
+                '9648': 'Mystery', '10749': 'Romance', '878': 'Sci-Fi', '10770': 'TV Movie',
+                '53': 'Thriller', '10752': 'War', '37': 'Western'
+            };
 
             // Check if user is logged in
             useEffect(() => {
@@ -425,14 +436,11 @@
                 setLoading(true);
                 try {
                     let allData = [];
+                    const seenIds = new Set(); // Track unique IDs to avoid duplicates
                     
                     const mediaTypesToFetch = mediaType === 'all' 
                         ? ['movie', 'tv', 'anime'] 
                         : [mediaType];
-                    
-                    const regionsToFetch = region === 'all' 
-                        ? ['US', 'IN', 'KR', 'JP'] 
-                        : [region];
 
                     for (const type of mediaTypesToFetch) {
                         if (type === 'anime') {
@@ -445,30 +453,46 @@
                                 rating: anime.score,
                                 releaseDate: anime.aired?.from,
                                 type: 'anime',
-                                regionLabel: 'Japan'
+                                genres: anime.genres?.map(g => g.name) || [],
+                                genreIds: anime.genres?.map(g => g.mal_id) || [],
+                                studios: anime.studios?.map(s => s.name) || []
                             }));
-                            allData = [...allData, ...formattedAnime];
+                            
+                            // Add only unique anime
+                            formattedAnime.forEach(item => {
+                                if (!seenIds.has(item.id)) {
+                                    seenIds.add(item.id);
+                                    allData.push(item);
+                                }
+                            });
                         } else {
-                            for (const reg of regionsToFetch) {
-                                const endpoint = type === 'movie' ? '/movie/popular' : '/tv/popular';
-                                const tmdbData = await fetchTMDBContent(endpoint, { region: reg, page: page });
-                                const formattedData = tmdbData.results?.map(item => ({
-                                    id: `${type}-${item.id}-${reg}`,
-                                    title: item.title || item.name,
-                                    poster: item.poster_path ? TMDB_IMAGE_BASE + item.poster_path : null,
-                                    overview: item.overview,
-                                    rating: item.vote_average,
-                                    releaseDate: item.release_date || item.first_air_date,
-                                    type: type,
-                                    regionLabel: reg === 'US' ? 'Hollywood' : reg === 'IN' ? 'India' : reg === 'KR' ? 'Korea' : 'Japan'
-                                })) || [];
-                                allData = [...allData, ...formattedData];
-                            }
+                            const endpoint = type === 'movie' ? '/movie/popular' : '/tv/popular';
+                            const tmdbData = await fetchTMDBContent(endpoint, { page: page });
+                            const formattedData = tmdbData.results?.map(item => ({
+                                id: `${type}-${item.id}`,
+                                tmdbId: item.id,
+                                title: item.title || item.name,
+                                poster: item.poster_path ? TMDB_IMAGE_BASE + item.poster_path : null,
+                                overview: item.overview,
+                                rating: item.vote_average,
+                                releaseDate: item.release_date || item.first_air_date,
+                                type: type,
+                                genreIds: item.genre_ids || [],
+                                genres: item.genre_ids?.map(gid => GENRE_MAP[gid]).filter(Boolean) || []
+                            })) || [];
+                            
+                            // Add only unique items
+                            formattedData.forEach(item => {
+                                if (!seenIds.has(item.id)) {
+                                    seenIds.add(item.id);
+                                    allData.push(item);
+                                }
+                            });
                         }
                     }
                     
                     setAllContent(allData);
-                    applySortAndPagination(allData, 1);
+                    applyFiltersAndPagination(allData, 1);
                     setTotalPages(Math.ceil(allData.length / ITEMS_PER_PAGE));
                 } catch (error) {
                     console.error('Error fetching content:', error);
@@ -477,30 +501,29 @@
                 setLoading(false);
             };
 
-            const applySortAndPagination = (data, page) => {
-                let sortedData = [...data];
+            const applyFiltersAndPagination = (data, page) => {
+                let filteredData = [...data];
                 
-                if (sortOrder === 'a-z') {
-                    sortedData.sort((a, b) => a.title.localeCompare(b.title));
-                } else if (sortOrder === 'z-a') {
-                    sortedData.sort((a, b) => b.title.localeCompare(a.title));
-                } else if (sortOrder === 'rating-high') {
-                    sortedData.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-                } else if (sortOrder === 'rating-low') {
-                    sortedData.sort((a, b) => (a.rating || 0) - (b.rating || 0));
+                // Apply genre filter
+                if (genre !== 'all') {
+                    filteredData = filteredData.filter(item => 
+                        item.genres?.includes(genre) || 
+                        item.genreIds?.includes(parseInt(genre))
+                    );
                 }
                 
                 const startIndex = (page - 1) * ITEMS_PER_PAGE;
                 const endIndex = startIndex + ITEMS_PER_PAGE;
-                setContent(sortedData.slice(startIndex, endIndex));
+                setContent(filteredData.slice(startIndex, endIndex));
                 setCurrentPage(page);
+                setTotalPages(Math.ceil(filteredData.length / ITEMS_PER_PAGE));
             };
 
             useEffect(() => {
                 if (allContent.length > 0) {
-                    applySortAndPagination(allContent, 1);
+                    applyFiltersAndPagination(allContent, 1);
                 }
-            }, [sortOrder]);
+            }, [genre]);
 
             const performDynamicSearch = async (query) => {
                 if (!query.trim() || query.length < 2) {
@@ -619,7 +642,7 @@
                 if (activeTab === 'discover' && isAuthenticated) {
                     loadContent();
                 }
-            }, [mediaType, region, activeTab, isAuthenticated]);
+            }, [mediaType, activeTab, isAuthenticated]);
 
             const addToWatchlist = (item) => {
                 if (!watchlist.find(w => w.id === item.id)) {
@@ -653,10 +676,70 @@
             const removeFromWatched = (id) => {
                 setWatched(watched.filter(item => item.id !== id));
             };
+            
+            const fetchItemDetails = async (item) => {
+                setSelectedItem(item);
+                setShowModal(true);
+                setModalDetails(null);
+                
+                try {
+                    if (item.type === 'anime') {
+                        const animeId = item.id.replace('anime-', '');
+                        const response = await fetch(`${JIKAN_BASE_URL}/anime/${animeId}/full`);
+                        const data = await response.json();
+                        const anime = data.data;
+                        
+                        setModalDetails({
+                            title: anime.title,
+                            poster: anime.images.jpg.large_image_url,
+                            overview: anime.synopsis,
+                            rating: anime.score,
+                            year: anime.year,
+                            episodes: anime.episodes,
+                            status: anime.status,
+                            genres: anime.genres?.map(g => g.name).join(', '),
+                            studios: anime.studios?.map(s => s.name).join(', '),
+                            duration: anime.duration,
+                            type: 'Anime',
+                            streaming: anime.streaming?.map(s => ({ name: s.name, url: s.url })) || []
+                        });
+                    } else {
+                        const tmdbId = item.tmdbId || item.id.split('-')[1];
+                        const endpoint = item.type === 'movie' ? `/movie/${tmdbId}` : `/tv/${tmdbId}`;
+                        const detailsData = await fetchTMDBContent(endpoint, { append_to_response: 'watch/providers' });
+                        
+                        const providers = detailsData['watch/providers']?.results?.US || {};
+                        const streaming = [
+                            ...(providers.flatrate || []),
+                            ...(providers.buy || []),
+                            ...(providers.rent || [])
+                        ].filter((v, i, a) => a.findIndex(t => t.provider_id === v.provider_id) === i);
+                        
+                        setModalDetails({
+                            title: detailsData.title || detailsData.name,
+                            poster: detailsData.poster_path ? TMDB_IMAGE_BASE + detailsData.poster_path : null,
+                            backdrop: detailsData.backdrop_path ? `https://image.tmdb.org/t/p/w1280${detailsData.backdrop_path}` : null,
+                            overview: detailsData.overview,
+                            rating: detailsData.vote_average,
+                            year: (detailsData.release_date || detailsData.first_air_date)?.split('-')[0],
+                            runtime: detailsData.runtime || detailsData.episode_run_time?.[0],
+                            status: detailsData.status,
+                            genres: detailsData.genres?.map(g => g.name).join(', '),
+                            seasons: detailsData.number_of_seasons,
+                            episodes: detailsData.number_of_episodes,
+                            type: item.type === 'movie' ? 'Movie' : 'TV Series',
+                            streaming: streaming.map(s => ({ name: s.provider_name, logo: `https://image.tmdb.org/t/p/w92${s.logo_path}` }))
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error fetching details:', error);
+                    setModalDetails({ error: 'Failed to load details' });
+                }
+            };
 
             const MediaCard = ({ item, showActions = true }) => (
                 <div className="bg-white rounded-lg shadow-lg overflow-hidden card-hover transition-all duration-300">
-                    <div className="relative h-64 sm:h-72 md:h-80">
+                    <div className="relative h-64 sm:h-72 md:h-80 cursor-pointer" onClick={() => fetchItemDetails(item)}>
                         {item.poster ? (
                             <img src={item.poster} alt={item.title} className="w-full h-full object-cover" />
                         ) : (
@@ -673,15 +756,19 @@
                             <div className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold uppercase">
                                 {item.type}
                             </div>
-                            {item.regionLabel && (
-                                <div className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
-                                    {item.regionLabel}
-                                </div>
-                            )}
                         </div>
+                        {item.genres && item.genres.length > 0 && (
+                            <div className="absolute bottom-2 left-2 right-2 flex gap-1 flex-wrap">
+                                {item.genres.slice(0, 2).map((genre, idx) => (
+                                    <span key={idx} className="bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
+                                        {genre}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <div className="p-3 sm:p-4">
-                        <h3 className="font-bold text-base sm:text-lg mb-1 sm:mb-2 text-gray-800 truncate" title={item.title}>{item.title}</h3>
+                        <h3 className="font-bold text-base sm:text-lg mb-1 sm:mb-2 text-gray-800 truncate cursor-pointer hover:text-purple-600" title={item.title} onClick={() => fetchItemDetails(item)}>{item.title}</h3>
                         <p className="text-gray-600 text-xs sm:text-sm mb-2">
                             {item.releaseDate ? new Date(item.releaseDate).toLocaleDateString() : 'TBA'}
                         </p>
@@ -691,19 +778,19 @@
                                 {activeTab === 'discover' && (
                                     <>
                                         <button
-                                            onClick={() => addToWatchlist(item)}
+                                            onClick={(e) => { e.stopPropagation(); addToWatchlist(item); }}
                                             className="flex-1 min-w-[80px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-2 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             + List
                                         </button>
                                         <button
-                                            onClick={() => addToWatching(item)}
+                                            onClick={(e) => { e.stopPropagation(); addToWatching(item); }}
                                             className="flex-1 min-w-[80px] bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white px-2 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             👁 Now
                                         </button>
                                         <button
-                                            onClick={() => markAsWatched(item)}
+                                            onClick={(e) => { e.stopPropagation(); markAsWatched(item); }}
                                             className="flex-1 min-w-[80px] bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-2 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             ✓ Done
@@ -713,19 +800,19 @@
                                 {activeTab === 'watchlist' && (
                                     <>
                                         <button
-                                            onClick={() => addToWatching(item)}
+                                            onClick={(e) => { e.stopPropagation(); addToWatching(item); }}
                                             className="flex-1 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             👁 Watch
                                         </button>
                                         <button
-                                            onClick={() => markAsWatched(item)}
+                                            onClick={(e) => { e.stopPropagation(); markAsWatched(item); }}
                                             className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             ✓ Done
                                         </button>
                                         <button
-                                            onClick={() => removeFromWatchlist(item.id)}
+                                            onClick={(e) => { e.stopPropagation(); removeFromWatchlist(item.id); }}
                                             className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             Remove
@@ -735,13 +822,13 @@
                                 {activeTab === 'watching' && (
                                     <>
                                         <button
-                                            onClick={() => markAsWatched(item)}
+                                            onClick={(e) => { e.stopPropagation(); markAsWatched(item); }}
                                             className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             ✓ Finished
                                         </button>
                                         <button
-                                            onClick={() => removeFromWatching(item.id)}
+                                            onClick={(e) => { e.stopPropagation(); removeFromWatching(item.id); }}
                                             className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                         >
                                             Remove
@@ -750,7 +837,7 @@
                                 )}
                                 {activeTab === 'watched' && (
                                     <button
-                                        onClick={() => removeFromWatched(item.id)}
+                                        onClick={(e) => { e.stopPropagation(); removeFromWatched(item.id); }}
                                         className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
                                     >
                                         Remove
@@ -827,7 +914,7 @@
                         {/* Filters and Search */}
                         {activeTab === 'discover' && (
                             <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 mb-4 sm:mb-8">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4">
                                     <div>
                                         <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Media Type</label>
                                         <select
@@ -841,37 +928,35 @@
                                             <option value="anime">Anime</option>
                                         </select>
                                     </div>
-                                    {mediaType !== 'anime' && (
-                                        <div>
-                                            <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Region</label>
-                                            <select
-                                                value={region}
-                                                onChange={(e) => setRegion(e.target.value)}
-                                                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
-                                            >
-                                                <option value="all">All Regions</option>
-                                                <option value="US">Hollywood (US)</option>
-                                                <option value="IN">India</option>
-                                                <option value="KR">Korea</option>
-                                                <option value="GB">UK</option>
-                                            </select>
-                                        </div>
-                                    )}
                                     <div>
-                                        <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Sort By</label>
+                                        <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Genre</label>
                                         <select
-                                            value={sortOrder}
-                                            onChange={(e) => setSortOrder(e.target.value)}
+                                            value={genre}
+                                            onChange={(e) => setGenre(e.target.value)}
                                             className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
                                         >
-                                            <option value="default">Default</option>
-                                            <option value="a-z">A to Z</option>
-                                            <option value="z-a">Z to A</option>
-                                            <option value="rating-high">Rating (High to Low)</option>
-                                            <option value="rating-low">Rating (Low to High)</option>
+                                            <option value="all">All Genres</option>
+                                            <option value="Action">Action</option>
+                                            <option value="Adventure">Adventure</option>
+                                            <option value="Animation">Animation</option>
+                                            <option value="Comedy">Comedy</option>
+                                            <option value="Crime">Crime</option>
+                                            <option value="Documentary">Documentary</option>
+                                            <option value="Drama">Drama</option>
+                                            <option value="Family">Family</option>
+                                            <option value="Fantasy">Fantasy</option>
+                                            <option value="History">History</option>
+                                            <option value="Horror">Horror</option>
+                                            <option value="Music">Music</option>
+                                            <option value="Mystery">Mystery</option>
+                                            <option value="Romance">Romance</option>
+                                            <option value="Sci-Fi">Sci-Fi</option>
+                                            <option value="Thriller">Thriller</option>
+                                            <option value="War">War</option>
+                                            <option value="Western">Western</option>
                                         </select>
                                     </div>
-                                    <div className={mediaType === 'anime' ? 'sm:col-span-2 lg:col-span-3' : 'sm:col-span-2 lg:col-span-1'}>
+                                    <div className="sm:col-span-2 lg:col-span-1">
                                         <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Search</label>
                                         <div className="relative">
                                             <div className="flex gap-2">
@@ -962,7 +1047,7 @@
                                             {totalPages > 1 && (
                                                 <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
                                                     <button
-                                                        onClick={() => applySortAndPagination(allContent, currentPage - 1)}
+                                                        onClick={() => applyFiltersAndPagination(allContent, currentPage - 1)}
                                                         disabled={currentPage === 1}
                                                         className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base ${
                                                             currentPage === 1 
@@ -989,7 +1074,7 @@
                                                             return (
                                                                 <button
                                                                     key={pageNum}
-                                                                    onClick={() => applySortAndPagination(allContent, pageNum)}
+                                                                    onClick={() => applyFiltersAndPagination(allContent, pageNum)}
                                                                     className={`px-3 sm:px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base min-w-[40px] sm:min-w-[48px] ${
                                                                         currentPage === pageNum 
                                                                             ? 'bg-purple-600 text-white' 
@@ -1003,7 +1088,7 @@
                                                     </div>
                                                     
                                                     <button
-                                                        onClick={() => applySortAndPagination(allContent, currentPage + 1)}
+                                                        onClick={() => applyFiltersAndPagination(allContent, currentPage + 1)}
                                                         disabled={currentPage === totalPages}
                                                         className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base ${
                                                             currentPage === totalPages 
@@ -1066,6 +1151,156 @@
                             )}
                         </div>
                     </div>
+                    
+                    {/* Details Modal */}
+                    {showModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-50" onClick={() => setShowModal(false)}>
+                            <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                                {modalDetails ? (
+                                    modalDetails.error ? (
+                                        <div className="p-8 text-center">
+                                            <p className="text-red-600 text-xl">{modalDetails.error}</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {modalDetails.backdrop && (
+                                                <div className="relative h-64 sm:h-96">
+                                                    <img src={modalDetails.backdrop} alt={modalDetails.title} className="w-full h-full object-cover rounded-t-2xl" />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent rounded-t-2xl"></div>
+                                                    <button 
+                                                        onClick={() => setShowModal(false)}
+                                                        className="absolute top-4 right-4 bg-black bg-opacity-50 hover:bg-opacity-75 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            )}
+                                            <div className="p-6 sm:p-8">
+                                                {!modalDetails.backdrop && (
+                                                    <button 
+                                                        onClick={() => setShowModal(false)}
+                                                        className="float-right bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full w-10 h-10 flex items-center justify-center text-2xl"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                )}
+                                                <div className="flex flex-col sm:flex-row gap-6">
+                                                    {modalDetails.poster && (
+                                                        <img src={modalDetails.poster} alt={modalDetails.title} className="w-full sm:w-64 rounded-lg shadow-lg" />
+                                                    )}
+                                                    <div className="flex-1">
+                                                        <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">{modalDetails.title}</h2>
+                                                        <div className="flex flex-wrap gap-2 mb-4">
+                                                            {modalDetails.rating && (
+                                                                <span className="bg-yellow-500 text-white px-3 py-1 rounded-full font-bold">
+                                                                    ⭐ {modalDetails.rating?.toFixed(1)}
+                                                                </span>
+                                                            )}
+                                                            <span className="bg-purple-600 text-white px-3 py-1 rounded-full font-bold">
+                                                                {modalDetails.type}
+                                                            </span>
+                                                            {modalDetails.year && (
+                                                                <span className="bg-gray-600 text-white px-3 py-1 rounded-full font-bold">
+                                                                    {modalDetails.year}
+                                                                </span>
+                                                            )}
+                                                            {modalDetails.status && (
+                                                                <span className="bg-blue-600 text-white px-3 py-1 rounded-full font-bold text-sm">
+                                                                    {modalDetails.status}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        {modalDetails.genres && (
+                                                            <p className="text-gray-700 mb-3">
+                                                                <strong>Genres:</strong> {modalDetails.genres}
+                                                            </p>
+                                                        )}
+                                                        
+                                                        {modalDetails.runtime && (
+                                                            <p className="text-gray-700 mb-3">
+                                                                <strong>Runtime:</strong> {modalDetails.runtime} min
+                                                            </p>
+                                                        )}
+                                                        
+                                                        {modalDetails.seasons && (
+                                                            <p className="text-gray-700 mb-3">
+                                                                <strong>Seasons:</strong> {modalDetails.seasons} ({modalDetails.episodes} episodes)
+                                                            </p>
+                                                        )}
+                                                        
+                                                        {modalDetails.episodes && !modalDetails.seasons && (
+                                                            <p className="text-gray-700 mb-3">
+                                                                <strong>Episodes:</strong> {modalDetails.episodes}
+                                                            </p>
+                                                        )}
+                                                        
+                                                        {modalDetails.studios && (
+                                                            <p className="text-gray-700 mb-3">
+                                                                <strong>Studios:</strong> {modalDetails.studios}
+                                                            </p>
+                                                        )}
+                                                        
+                                                        {modalDetails.duration && (
+                                                            <p className="text-gray-700 mb-3">
+                                                                <strong>Duration:</strong> {modalDetails.duration}
+                                                            </p>
+                                                        )}
+                                                        
+                                                        <p className="text-gray-700 mb-6 leading-relaxed">
+                                                            {modalDetails.overview || 'No description available.'}
+                                                        </p>
+                                                        
+                                                        {modalDetails.streaming && modalDetails.streaming.length > 0 && (
+                                                            <div className="border-t pt-4">
+                                                                <h3 className="text-xl font-bold text-gray-800 mb-3">Where to Watch</h3>
+                                                                <div className="flex flex-wrap gap-3">
+                                                                    {modalDetails.streaming.map((provider, idx) => (
+                                                                        <div key={idx} className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded-lg">
+                                                                            {provider.logo && (
+                                                                                <img src={provider.logo} alt={provider.name} className="w-8 h-8 rounded" />
+                                                                            )}
+                                                                            <span className="font-semibold text-sm">{provider.name}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        
+                                                        <div className="mt-6 flex gap-2 flex-wrap">
+                                                            <button
+                                                                onClick={() => { addToWatchlist(selectedItem); setShowModal(false); }}
+                                                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition"
+                                                            >
+                                                                + Add to Watchlist
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { addToWatching(selectedItem); setShowModal(false); }}
+                                                                className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-semibold transition"
+                                                            >
+                                                                👁 Watching Now
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { markAsWatched(selectedItem); setShowModal(false); }}
+                                                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold transition"
+                                                            >
+                                                                ✓ Mark as Watched
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )
+                                ) : (
+                                    <div className="p-8 text-center">
+                                        <div className="text-4xl mb-4">⏳</div>
+                                        <p className="text-xl text-gray-600">Loading details...</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
