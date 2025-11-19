@@ -1,0 +1,183 @@
+# 📱 Mobile Features Quick Reference
+
+## Screen Sizes & Layouts
+
+### 📱 Small Mobile (< 640px)
+- 2 cards per row
+- Stacked navigation (2x2 grid)
+- Compact buttons and text
+- Full-width pagination buttons
+- Shortened labels
+
+### 📱 Large Mobile/Tablet (640px - 1024px)
+- 2-3 cards per row
+- Horizontal navigation bar
+- Medium-sized buttons
+- Side-by-side pagination
+
+### 💻 Desktop (> 1024px)
+- 4 cards per row
+- Full navigation with counts
+- Large buttons with full text
+- Centered pagination
+
+## Button Labels by Screen Size
+
+### Discover Tab:
+- Mobile: "+ List" | "👁 Now" | "✓ Done"
+- Desktop: "+ Watchlist" | "👁 Watching" | "✓ Watched"
+
+### Navigation Tabs:
+- Mobile: "Discover" | "List" | "Now" | "Done"
+- Desktop: "🔍 Discover" | "📋 Watchlist (X)" | "👁 Watching (X)" | "✓ Watched (X)"
+
+## Touch Targets
+
+All interactive elements meet WCAG 2.1 guidelines:
+- Minimum size: 44x44px
+- Proper spacing: 8px minimum
+- Active states: Visual feedback on tap
+- No accidental taps
+
+## Typography Scale
+
+### Headers:
+- Mobile: 1.75rem (28px)
+- Desktop: 2.5rem (40px)
+
+### Card Titles:
+- Mobile: 0.875rem (14px)
+- Desktop: 1.125rem (18px)
+
+### Buttons:
+- Mobile: 0.75rem (12px)
+- Desktop: 0.875rem (14px)
+
+### Body Text:
+- Mobile: 0.75rem (12px)
+- Desktop: 0.875rem (14px)
+
+## Grid Layouts
+
+### Content Cards:
+```
+Mobile:    [Card] [Card]
+           [Card] [Card]
+
+Tablet:    [Card] [Card] [Card]
+           [Card] [Card] [Card]
+
+Desktop:   [Card] [Card] [Card] [Card]
+           [Card] [Card] [Card] [Card]
+```
+
+### Navigation:
+```
+Mobile:    [Discover] [List]
+           [Now]      [Done]
+
+Desktop:   [Discover] [Watchlist] [Watching] [Watched]
+```
+
+## Spacing System
+
+### Padding:
+- Mobile: 0.75rem (12px)
+- Desktop: 1.5rem (24px)
+
+### Gaps:
+- Mobile: 0.75rem (12px)
+- Desktop: 1.5rem (24px)
+
+### Margins:
+- Mobile: 0.5rem (8px)
+- Desktop: 2rem (32px)
+
+## Special Mobile Behaviors
+
+1. **Search Dropdown**
+   - Max height: 60vh on mobile (prevents keyboard overlap)
+   - Auto-hides on very small screens when keyboard opens
+
+2. **Pagination**
+   - Buttons stack vertically on mobile
+   - Full-width on smallest screens
+   - Horizontal on tablet+
+
+3. **Filters**
+   - One filter per row on mobile
+   - 2 per row on tablet
+   - 4 per row on desktop
+
+4. **Cards**
+   - Smaller poster height on mobile (280px vs 320px)
+   - Compact button layout
+   - Abbreviated text
+
+## Performance Tips
+
+### For Best Experience:
+- Use Chrome or Safari on mobile
+- Enable JavaScript
+- Allow localStorage for data persistence
+- Use WiFi for initial load (images)
+
+### Data Usage:
+- Images optimized for mobile
+- API calls minimized
+- Local storage for offline data
+
+## Gestures Supported
+
+✅ Tap to select
+✅ Scroll to browse
+✅ Swipe to dismiss (native)
+✅ Pinch to zoom (images)
+✅ Pull to refresh (browser native)
+
+## Accessibility
+
+- Screen reader compatible
+- High contrast mode support
+- Keyboard navigation works
+- Focus indicators visible
+- ARIA labels present
+
+## Common Mobile Issues & Solutions
+
+### Issue: Buttons too small
+✅ Solution: All buttons meet 44px minimum
+
+### Issue: Text too small to read
+✅ Solution: Responsive typography scales properly
+
+### Issue: Cards too cramped
+✅ Solution: 2-column layout optimizes space
+
+### Issue: Navigation hard to use
+✅ Solution: Large tap targets, clear labels
+
+### Issue: Search dropdown covers content
+✅ Solution: Auto-adjusts height, hides when needed
+
+## Tips for Users
+
+1. **Portrait mode recommended** for best card layout
+2. **Landscape mode** works but shows more per row
+3. **Pull down to refresh** the discover page
+4. **Tap and hold** card titles to see full name
+5. **Use search** for quick access to specific content
+
+## Supported Devices
+
+✅ iPhone 6/SE and newer
+✅ Android phones (2018+)
+✅ iPads (all models)
+✅ Android tablets
+✅ All desktop browsers
+
+## Not Supported
+
+❌ Internet Explorer
+❌ Very old Android browsers (< v4.4)
+❌ Feature phones

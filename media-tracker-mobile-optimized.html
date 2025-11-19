@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Tracker - Movies, Anime & Series</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.3);
+        }
+        .card-hover:active {
+            transform: translateY(-2px);
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .mobile-card-height {
+                height: 280px;
+            }
+            .mobile-compact-text {
+                font-size: 0.75rem;
+            }
+            .mobile-title {
+                font-size: 0.9rem;
+            }
+            .mobile-button {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.75rem;
+            }
+            .mobile-header {
+                font-size: 1.75rem;
+            }
+            .mobile-nav-scroll {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            .mobile-filter-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+            .mobile-search-dropdown {
+                max-height: 60vh;
+                overflow-y: auto;
+            }
+            .mobile-pagination-compact {
+                gap: 0.25rem;
+            }
+            .mobile-pagination-compact button {
+                min-width: 2.5rem;
+                padding: 0.5rem;
+                font-size: 0.875rem;
+            }
+        }
+        
+        /* Improve touch targets */
+        button, a, input, select {
+            -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+        }
+        
+        /* Better mobile scrolling */
+        * {
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Hide suggestion dropdown on small screens when keyboard is open */
+        @media (max-height: 500px) {
+            .mobile-search-dropdown {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // TMDB API
+        const TMDB_API_KEY = '9427a28ea4bc42a44ee6bf3d3d6a746b';
+        const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
+        const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w500';
+        
+        // Jikan API (MyAnimeList)
+        const JIKAN_BASE_URL = 'https://api.jikan.moe/v4';
+
+        // Authentication
+        const AUTH_USER = 'Yonik';
+        const AUTH_PASS = 'nikyo@2121';
+
+        function LoginScreen({ onLogin }) {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (username === AUTH_USER && password === AUTH_PASS) {
+                    onLogin();
+                } else {
+                    setError('Invalid username or password');
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md">
+                        <div className="text-center mb-6 sm:mb-8">
+                            <h1 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">🎬 Media Tracker</h1>
+                            <p className="text-sm sm:text-base text-gray-600">Please login to continue</p>
+                        </div>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Username</label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                    placeholder="Enter username"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Password</label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                    placeholder="Enter password"
+                                    required
+                                />
+                            </div>
+                            {error && (
+                                <div className="bg-red-100 border border-red-400 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded text-sm sm:text-base">
+                                    {error}
+                                </div>
+                            )}
+                            <button
+                                type="submit"
+                                className="w-full bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-bold py-2 sm:py-3 rounded-lg transition text-sm sm:text-base"
+                            >
+                                Login
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        function MediaTracker() {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [activeTab, setActiveTab] = useState('discover');
+            const [mediaType, setMediaType] = useState('all');
+            const [region, setRegion] = useState('all');
+            const [content, setContent] = useState([]);
+            const [allContent, setAllContent] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [watchlist, setWatchlist] = useState([]);
+            const [watching, setWatching] = useState([]);
+            const [watched, setWatched] = useState([]);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchSuggestions, setSearchSuggestions] = useState([]);
+            const [showSuggestions, setShowSuggestions] = useState(false);
+            const [currentPage, setCurrentPage] = useState(1);
+            const [totalPages, setTotalPages] = useState(1);
+            const [sortOrder, setSortOrder] = useState('default');
+            const searchTimeout = useRef(null);
+            const ITEMS_PER_PAGE = 20;
+
+            // Check if user is logged in
+            useEffect(() => {
+                const loggedIn = localStorage.getItem('isLoggedIn');
+                if (loggedIn === 'true') {
+                    setIsAuthenticated(true);
+                }
+            }, []);
+
+            const handleLogin = () => {
+                localStorage.setItem('isLoggedIn', 'true');
+                setIsAuthenticated(true);
+            };
+
+            const handleLogout = () => {
+                localStorage.setItem('isLoggedIn', 'false');
+                setIsAuthenticated(false);
+            };
+
+            // Load saved data from localStorage
+            useEffect(() => {
+                if (!isAuthenticated) return;
+                const savedWatchlist = localStorage.getItem('watchlist');
+                const savedWatching = localStorage.getItem('watching');
+                const savedWatched = localStorage.getItem('watched');
+                if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
+                if (savedWatching) setWatching(JSON.parse(savedWatching));
+                if (savedWatched) setWatched(JSON.parse(savedWatched));
+            }, [isAuthenticated]);
+
+            // Save to localStorage whenever lists change
+            useEffect(() => {
+                if (!isAuthenticated) return;
+                localStorage.setItem('watchlist', JSON.stringify(watchlist));
+            }, [watchlist, isAuthenticated]);
+
+            useEffect(() => {
+                if (!isAuthenticated) return;
+                localStorage.setItem('watching', JSON.stringify(watching));
+            }, [watching, isAuthenticated]);
+
+            useEffect(() => {
+                if (!isAuthenticated) return;
+                localStorage.setItem('watched', JSON.stringify(watched));
+            }, [watched, isAuthenticated]);
+
+            const fetchTMDBContent = async (endpoint, params = {}) => {
+                const queryParams = new URLSearchParams({
+                    api_key: TMDB_API_KEY,
+                    language: 'en-US',
+                    ...params
+                });
+                const response = await fetch(`${TMDB_BASE_URL}${endpoint}?${queryParams}`);
+                return response.json();
+            };
+
+            const fetchAnime = async (type = 'upcoming') => {
+                let endpoint = '/seasons/now';
+                if (type === 'upcoming') endpoint = '/seasons/upcoming';
+                if (type === 'top') endpoint = '/top/anime';
+                
+                const response = await fetch(`${JIKAN_BASE_URL}${endpoint}`);
+                const data = await response.json();
+                return data.data;
+            };
+
+            const loadContent = async (page = 1) => {
+                setLoading(true);
+                try {
+                    let allData = [];
+                    
+                    // Determine which media types to fetch
+                    const mediaTypesToFetch = mediaType === 'all' 
+                        ? ['movie', 'tv', 'anime'] 
+                        : [mediaType];
+                    
+                    // Determine regions to fetch (for non-anime content)
+                    const regionsToFetch = region === 'all' 
+                        ? ['US', 'IN', 'KR', 'JP'] 
+                        : [region];
+
+                    for (const type of mediaTypesToFetch) {
+                        if (type === 'anime') {
+                            const animeData = await fetchAnime('now');
+                            const formattedAnime = animeData.map(anime => ({
+                                id: `anime-${anime.mal_id}`,
+                                title: anime.title,
+                                poster: anime.images.jpg.large_image_url,
+                                overview: anime.synopsis,
+                                rating: anime.score,
+                                releaseDate: anime.aired?.from,
+                                type: 'anime',
+                                regionLabel: 'Japan'
+                            }));
+                            allData = [...allData, ...formattedAnime];
+                        } else {
+                            // For movies and TV, fetch from different regions
+                            for (const reg of regionsToFetch) {
+                                const endpoint = type === 'movie' ? '/movie/popular' : '/tv/popular';
+                                const tmdbData = await fetchTMDBContent(endpoint, { region: reg, page: page });
+                                const formattedData = tmdbData.results?.map(item => ({
+                                    id: `${type}-${item.id}-${reg}`,
+                                    title: item.title || item.name,
+                                    poster: item.poster_path ? TMDB_IMAGE_BASE + item.poster_path : null,
+                                    overview: item.overview,
+                                    rating: item.vote_average,
+                                    releaseDate: item.release_date || item.first_air_date,
+                                    type: type,
+                                    regionLabel: reg === 'US' ? 'Hollywood' : reg === 'IN' ? 'India' : reg === 'KR' ? 'Korea' : 'Japan'
+                                })) || [];
+                                allData = [...allData, ...formattedData];
+                            }
+                        }
+                    }
+                    
+                    setAllContent(allData);
+                    applySortAndPagination(allData, 1);
+                    setTotalPages(Math.ceil(allData.length / ITEMS_PER_PAGE));
+                } catch (error) {
+                    console.error('Error fetching content:', error);
+                    alert('Error loading content. Please check your internet connection.');
+                }
+                setLoading(false);
+            };
+
+            const applySortAndPagination = (data, page) => {
+                let sortedData = [...data];
+                
+                if (sortOrder === 'a-z') {
+                    sortedData.sort((a, b) => a.title.localeCompare(b.title));
+                } else if (sortOrder === 'z-a') {
+                    sortedData.sort((a, b) => b.title.localeCompare(a.title));
+                } else if (sortOrder === 'rating-high') {
+                    sortedData.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+                } else if (sortOrder === 'rating-low') {
+                    sortedData.sort((a, b) => (a.rating || 0) - (b.rating || 0));
+                }
+                
+                const startIndex = (page - 1) * ITEMS_PER_PAGE;
+                const endIndex = startIndex + ITEMS_PER_PAGE;
+                setContent(sortedData.slice(startIndex, endIndex));
+                setCurrentPage(page);
+            };
+
+            useEffect(() => {
+                if (allContent.length > 0) {
+                    applySortAndPagination(allContent, 1);
+                }
+            }, [sortOrder]);
+
+            const performDynamicSearch = async (query) => {
+                if (!query.trim() || query.length < 2) {
+                    setSearchSuggestions([]);
+                    setShowSuggestions(false);
+                    return;
+                }
+
+                try {
+                    let suggestions = [];
+                    
+                    const typesToSearch = mediaType === 'all' ? ['movie', 'tv', 'anime'] : [mediaType];
+                    
+                    for (const type of typesToSearch) {
+                        if (type === 'anime') {
+                            const response = await fetch(`${JIKAN_BASE_URL}/anime?q=${query}&limit=5`);
+                            const animeData = await response.json();
+                            const animeSuggestions = animeData.data.map(anime => ({
+                                id: `anime-${anime.mal_id}`,
+                                title: anime.title,
+                                poster: anime.images.jpg.image_url,
+                                year: anime.year,
+                                type: 'anime'
+                            }));
+                            suggestions = [...suggestions, ...animeSuggestions];
+                        } else {
+                            const endpoint = `/search/${type}`;
+                            const tmdbData = await fetchTMDBContent(endpoint, { query, page: 1 });
+                            const tmdbSuggestions = tmdbData.results?.slice(0, 5).map(item => ({
+                                id: `${type}-${item.id}`,
+                                title: item.title || item.name,
+                                poster: item.poster_path ? TMDB_IMAGE_BASE + item.poster_path : null,
+                                year: (item.release_date || item.first_air_date)?.split('-')[0],
+                                type: type
+                            })) || [];
+                            suggestions = [...suggestions, ...tmdbSuggestions];
+                        }
+                    }
+                    
+                    setSearchSuggestions(suggestions.slice(0, 15));
+                    setShowSuggestions(true);
+                } catch (error) {
+                    console.error('Error searching:', error);
+                }
+            };
+
+            const handleSearchInput = (value) => {
+                setSearchQuery(value);
+                
+                // Clear previous timeout
+                if (searchTimeout.current) {
+                    clearTimeout(searchTimeout.current);
+                }
+
+                // Set new timeout for dynamic search
+                searchTimeout.current = setTimeout(() => {
+                    performDynamicSearch(value);
+                }, 300); // 300ms delay after user stops typing
+            };
+
+            const selectSuggestion = async (suggestion) => {
+                setSearchQuery(suggestion.title);
+                setShowSuggestions(false);
+                await searchContent(suggestion.title);
+            };
+
+            const searchContent = async (query = searchQuery) => {
+                if (!query.trim()) {
+                    loadContent();
+                    return;
+                }
+                setLoading(true);
+                try {
+                    let allData = [];
+                    
+                    const typesToSearch = mediaType === 'all' ? ['movie', 'tv', 'anime'] : [mediaType];
+                    
+                    for (const type of typesToSearch) {
+                        if (type === 'anime') {
+                            const response = await fetch(`${JIKAN_BASE_URL}/anime?q=${query}&limit=10`);
+                            const animeData = await response.json();
+                            const formattedAnime = animeData.data.map(anime => ({
+                                id: `anime-${anime.mal_id}`,
+                                title: anime.title,
+                                poster: anime.images.jpg.large_image_url,
+                                overview: anime.synopsis,
+                                rating: anime.score,
+                                releaseDate: anime.aired?.from,
+                                type: 'anime',
+                                regionLabel: 'Japan'
+                            }));
+                            allData = [...allData, ...formattedAnime];
+                        } else {
+                            const endpoint = `/search/${type}`;
+                            const tmdbData = await fetchTMDBContent(endpoint, { query });
+                            const formattedData = tmdbData.results?.slice(0, 10).map(item => ({
+                                id: `${type}-${item.id}`,
+                                title: item.title || item.name,
+                                poster: item.poster_path ? TMDB_IMAGE_BASE + item.poster_path : null,
+                                overview: item.overview,
+                                rating: item.vote_average,
+                                releaseDate: item.release_date || item.first_air_date,
+                                type: type
+                            })) || [];
+                            allData = [...allData, ...formattedData];
+                        }
+                    }
+                    
+                    setContent(allData);
+                    setShowSuggestions(false);
+                } catch (error) {
+                    console.error('Error searching:', error);
+                }
+                setLoading(false);
+            };
+
+            useEffect(() => {
+                if (activeTab === 'discover') {
+                    loadContent();
+                }
+            }, [mediaType, region, activeTab]);
+
+            const addToWatchlist = (item) => {
+                if (!watchlist.find(w => w.id === item.id)) {
+                    setWatchlist([...watchlist, { ...item, addedDate: new Date().toISOString() }]);
+                }
+            };
+
+            const addToWatching = (item) => {
+                if (!watching.find(w => w.id === item.id)) {
+                    setWatching([...watching, { ...item, startedDate: new Date().toISOString() }]);
+                }
+                setWatchlist(watchlist.filter(w => w.id !== item.id));
+            };
+
+            const markAsWatched = (item) => {
+                if (!watched.find(w => w.id === item.id)) {
+                    setWatched([...watched, { ...item, watchedDate: new Date().toISOString() }]);
+                }
+                setWatchlist(watchlist.filter(w => w.id !== item.id));
+                setWatching(watching.filter(w => w.id !== item.id));
+            };
+
+            const removeFromWatchlist = (id) => {
+                setWatchlist(watchlist.filter(item => item.id !== id));
+            };
+
+            const removeFromWatching = (id) => {
+                setWatching(watching.filter(item => item.id !== id));
+            };
+
+            const removeFromWatched = (id) => {
+                setWatched(watched.filter(item => item.id !== id));
+            };
+
+            const MediaCard = ({ item, showActions = true }) => (
+                <div className="bg-white rounded-lg shadow-lg overflow-hidden card-hover transition-all duration-300">
+                    <div className="relative h-64 sm:h-72 md:h-80">
+                        {item.poster ? (
+                            <img src={item.poster} alt={item.title} className="w-full h-full object-cover" />
+                        ) : (
+                            <div className="w-full h-full bg-gray-300 flex items-center justify-center">
+                                <span className="text-gray-500 text-3xl sm:text-4xl">🎬</span>
+                            </div>
+                        )}
+                        {item.rating && (
+                            <div className="absolute top-2 right-2 bg-yellow-500 text-white px-2 py-1 rounded-full font-bold text-xs sm:text-sm">
+                                ⭐ {item.rating?.toFixed(1)}
+                            </div>
+                        )}
+                        <div className="absolute top-2 left-2 flex gap-1 flex-col">
+                            <div className="bg-purple-600 text-white px-2 py-1 rounded text-xs font-bold uppercase">
+                                {item.type}
+                            </div>
+                            {item.regionLabel && (
+                                <div className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
+                                    {item.regionLabel}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="p-3 sm:p-4">
+                        <h3 className="font-bold text-base sm:text-lg mb-1 sm:mb-2 text-gray-800 truncate" title={item.title}>{item.title}</h3>
+                        <p className="text-gray-600 text-xs sm:text-sm mb-2">
+                            {item.releaseDate ? new Date(item.releaseDate).toLocaleDateString() : 'TBA'}
+                        </p>
+                        <p className="text-gray-700 text-xs sm:text-sm line-clamp-2 sm:line-clamp-3 mb-3 sm:mb-4">{item.overview || 'No description available'}</p>
+                        {showActions && (
+                            <div className="flex gap-1 sm:gap-2 flex-wrap">
+                                {activeTab === 'discover' && (
+                                    <>
+                                        <button
+                                            onClick={() => addToWatchlist(item)}
+                                            className="flex-1 min-w-[80px] bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-2 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            + List
+                                        </button>
+                                        <button
+                                            onClick={() => addToWatching(item)}
+                                            className="flex-1 min-w-[80px] bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white px-2 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            👁 Now
+                                        </button>
+                                        <button
+                                            onClick={() => markAsWatched(item)}
+                                            className="flex-1 min-w-[80px] bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-2 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            ✓ Done
+                                        </button>
+                                    </>
+                                )}
+                                {activeTab === 'watchlist' && (
+                                    <>
+                                        <button
+                                            onClick={() => addToWatching(item)}
+                                            className="flex-1 bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            👁 Watch
+                                        </button>
+                                        <button
+                                            onClick={() => markAsWatched(item)}
+                                            className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            ✓ Done
+                                        </button>
+                                        <button
+                                            onClick={() => removeFromWatchlist(item.id)}
+                                            className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            Remove
+                                        </button>
+                                    </>
+                                )}
+                                {activeTab === 'watching' && (
+                                    <>
+                                        <button
+                                            onClick={() => markAsWatched(item)}
+                                            className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            ✓ Finished
+                                        </button>
+                                        <button
+                                            onClick={() => removeFromWatching(item.id)}
+                                            className="flex-1 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                        >
+                                            Remove
+                                        </button>
+                                    </>
+                                )}
+                                {activeTab === 'watched' && (
+                                    <button
+                                        onClick={() => removeFromWatched(item.id)}
+                                        className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-semibold transition"
+                                    >
+                                        Remove
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+
+            if (!isAuthenticated) {
+                return <LoginScreen onLogin={handleLogin} />;
+            }
+
+            return (
+                <div className="min-h-screen p-2 sm:p-4 md:p-8">
+                    <div className="max-w-7xl mx-auto">
+                        {/* Header */}
+                        <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 mb-4 sm:mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div>
+                                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-1 sm:mb-2">🎬 Media Tracker</h1>
+                                <p className="text-sm sm:text-base text-gray-600">Track movies, anime, and web series</p>
+                            </div>
+                            <button
+                                onClick={handleLogout}
+                                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base"
+                            >
+                                Logout
+                            </button>
+                        </div>
+
+                        {/* Navigation Tabs */}
+                        <div className="bg-white rounded-2xl shadow-2xl p-2 mb-4 sm:mb-8">
+                            <div className="grid grid-cols-2 sm:flex gap-2">
+                                <button
+                                    onClick={() => setActiveTab('discover')}
+                                    className={`flex-1 min-w-[100px] px-2 sm:px-4 py-2 sm:py-3 rounded-lg font-semibold transition text-xs sm:text-sm md:text-base ${
+                                        activeTab === 'discover' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <span className="hidden sm:inline">🔍 </span>Discover
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('watchlist')}
+                                    className={`flex-1 min-w-[100px] px-2 sm:px-4 py-2 sm:py-3 rounded-lg font-semibold transition text-xs sm:text-sm md:text-base ${
+                                        activeTab === 'watchlist' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <span className="hidden sm:inline">📋 </span>List<span className="hidden sm:inline"> ({watchlist.length})</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('watching')}
+                                    className={`flex-1 min-w-[100px] px-2 sm:px-4 py-2 sm:py-3 rounded-lg font-semibold transition text-xs sm:text-sm md:text-base ${
+                                        activeTab === 'watching' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <span className="hidden sm:inline">👁 </span>Now<span className="hidden sm:inline"> ({watching.length})</span>
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('watched')}
+                                    className={`flex-1 min-w-[100px] px-2 sm:px-4 py-2 sm:py-3 rounded-lg font-semibold transition text-xs sm:text-sm md:text-base ${
+                                        activeTab === 'watched' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <span className="hidden sm:inline">✓ </span>Done<span className="hidden sm:inline"> ({watched.length})</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Filters and Search */}
+                        {activeTab === 'discover' && (
+                            <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 mb-4 sm:mb-8">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Media Type</label>
+                                        <select
+                                            value={mediaType}
+                                            onChange={(e) => setMediaType(e.target.value)}
+                                            className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                        >
+                                            <option value="all">All Media</option>
+                                            <option value="movie">Movies</option>
+                                            <option value="tv">TV Series</option>
+                                            <option value="anime">Anime</option>
+                                        </select>
+                                    </div>
+                                    {mediaType !== 'anime' && (
+                                        <div>
+                                            <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Region</label>
+                                            <select
+                                                value={region}
+                                                onChange={(e) => setRegion(e.target.value)}
+                                                className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                            >
+                                                <option value="all">All Regions</option>
+                                                <option value="US">Hollywood (US)</option>
+                                                <option value="IN">India</option>
+                                                <option value="KR">Korea</option>
+                                                <option value="GB">UK</option>
+                                            </select>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Sort By</label>
+                                        <select
+                                            value={sortOrder}
+                                            onChange={(e) => setSortOrder(e.target.value)}
+                                            className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                        >
+                                            <option value="default">Default</option>
+                                            <option value="a-z">A to Z</option>
+                                            <option value="z-a">Z to A</option>
+                                            <option value="rating-high">Rating (High to Low)</option>
+                                            <option value="rating-low">Rating (Low to High)</option>
+                                        </select>
+                                    </div>
+                                    <div className={mediaType === 'anime' ? 'sm:col-span-2 lg:col-span-3' : 'sm:col-span-2 lg:col-span-1'}>
+                                        <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">Search</label>
+                                        <div className="relative">
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={(e) => handleSearchInput(e.target.value)}
+                                                    onKeyPress={(e) => e.key === 'Enter' && searchContent()}
+                                                    onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
+                                                    placeholder="Search..."
+                                                    className="flex-1 px-3 sm:px-4 py-2 text-sm sm:text-base border-2 border-gray-300 rounded-lg focus:border-purple-600 focus:outline-none"
+                                                />
+                                                <button
+                                                    onClick={() => searchContent()}
+                                                    className="bg-purple-600 hover:bg-purple-700 text-white px-3 sm:px-6 py-2 rounded-lg font-semibold transition text-sm sm:text-base whitespace-nowrap"
+                                                >
+                                                    Search
+                                                </button>
+                                                {searchQuery && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSearchQuery('');
+                                                            setShowSuggestions(false);
+                                                            setSearchSuggestions([]);
+                                                            loadContent();
+                                                        }}
+                                                        className="bg-gray-500 hover:bg-gray-600 text-white px-2 sm:px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Dynamic Search Suggestions Dropdown */}
+                                            {showSuggestions && searchSuggestions.length > 0 && (
+                                                <div className="absolute z-50 w-full mt-2 bg-white border-2 border-purple-300 rounded-lg shadow-2xl max-h-60 sm:max-h-96 overflow-y-auto mobile-search-dropdown">
+                                                    {searchSuggestions.map((suggestion) => (
+                                                        <div
+                                                            key={suggestion.id}
+                                                            onClick={() => selectSuggestion(suggestion)}
+                                                            className="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 hover:bg-purple-50 active:bg-purple-100 cursor-pointer border-b border-gray-200 transition"
+                                                        >
+                                                            {suggestion.poster ? (
+                                                                <img 
+                                                                    src={suggestion.poster} 
+                                                                    alt={suggestion.title}
+                                                                    className="w-10 h-14 sm:w-12 sm:h-16 object-cover rounded flex-shrink-0"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-10 h-14 sm:w-12 sm:h-16 bg-gray-300 rounded flex items-center justify-center text-xl sm:text-2xl flex-shrink-0">
+                                                                    🎬
+                                                                </div>
+                                                            )}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-semibold text-gray-800 text-sm sm:text-base truncate">{suggestion.title}</div>
+                                                                <div className="text-xs sm:text-sm text-gray-600">
+                                                                    {suggestion.year && `${suggestion.year} • `}
+                                                                    <span className="capitalize">{suggestion.type}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Content Grid */}
+                        <div className="bg-white rounded-2xl shadow-2xl p-3 sm:p-6">
+                            {loading ? (
+                                <div className="flex justify-center items-center h-64">
+                                    <div className="text-xl sm:text-2xl text-gray-600">Loading...</div>
+                                </div>
+                            ) : (
+                                <>
+                                    {activeTab === 'discover' && (
+                                        <>
+                                            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                                                {content.map(item => (
+                                                    <MediaCard key={item.id} item={item} />
+                                                ))}
+                                            </div>
+                                            
+                                            {/* Pagination Controls */}
+                                            {totalPages > 1 && (
+                                                <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-4">
+                                                    <button
+                                                        onClick={() => applySortAndPagination(allContent, currentPage - 1)}
+                                                        disabled={currentPage === 1}
+                                                        className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base ${
+                                                            currentPage === 1 
+                                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                                                : 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white'
+                                                        }`}
+                                                    >
+                                                        ← Previous
+                                                    </button>
+                                                    
+                                                    <div className="flex gap-1 sm:gap-2 flex-wrap justify-center">
+                                                        {[...Array(Math.min(5, totalPages))].map((_, idx) => {
+                                                            let pageNum;
+                                                            if (totalPages <= 5) {
+                                                                pageNum = idx + 1;
+                                                            } else if (currentPage <= 3) {
+                                                                pageNum = idx + 1;
+                                                            } else if (currentPage >= totalPages - 2) {
+                                                                pageNum = totalPages - 4 + idx;
+                                                            } else {
+                                                                pageNum = currentPage - 2 + idx;
+                                                            }
+                                                            
+                                                            return (
+                                                                <button
+                                                                    key={pageNum}
+                                                                    onClick={() => applySortAndPagination(allContent, pageNum)}
+                                                                    className={`px-3 sm:px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base min-w-[40px] sm:min-w-[48px] ${
+                                                                        currentPage === pageNum 
+                                                                            ? 'bg-purple-600 text-white' 
+                                                                            : 'bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    {pageNum}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    
+                                                    <button
+                                                        onClick={() => applySortAndPagination(allContent, currentPage + 1)}
+                                                        disabled={currentPage === totalPages}
+                                                        className={`w-full sm:w-auto px-4 py-2 rounded-lg font-semibold transition text-sm sm:text-base ${
+                                                            currentPage === totalPages 
+                                                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                                                                : 'bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white'
+                                                        }`}
+                                                    >
+                                                        Next →
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                    {activeTab === 'watchlist' && (
+                                        watchlist.length > 0 ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                                                {watchlist.map(item => (
+                                                    <MediaCard key={item.id} item={item} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-12 sm:py-16 text-gray-500">
+                                                <p className="text-4xl sm:text-5xl mb-2">📋</p>
+                                                <p className="text-lg sm:text-xl font-semibold">Your watchlist is empty</p>
+                                                <p className="text-sm sm:text-base mt-2">Start adding content from the Discover tab!</p>
+                                            </div>
+                                        )
+                                    )}
+                                    {activeTab === 'watching' && (
+                                        watching.length > 0 ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                                                {watching.map(item => (
+                                                    <MediaCard key={item.id} item={item} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-12 sm:py-16 text-gray-500">
+                                                <p className="text-4xl sm:text-5xl mb-2">👁</p>
+                                                <p className="text-lg sm:text-xl font-semibold">Not currently watching anything</p>
+                                                <p className="text-sm sm:text-base mt-2">Mark content as watching to track your progress!</p>
+                                            </div>
+                                        )
+                                    )}
+                                    {activeTab === 'watched' && (
+                                        watched.length > 0 ? (
+                                            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+                                                {watched.map(item => (
+                                                    <MediaCard key={item.id} item={item} />
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="text-center py-12 sm:py-16 text-gray-500">
+                                                <p className="text-4xl sm:text-5xl mb-2">✓</p>
+                                                <p className="text-lg sm:text-xl font-semibold">No watched content yet</p>
+                                                <p className="text-sm sm:text-base mt-2">Mark content as watched to track your progress!</p>
+                                            </div>
+                                        )
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<MediaTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
